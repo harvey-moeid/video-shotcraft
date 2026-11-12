@@ -1,5 +1,6 @@
 // Wrangler config — Cloudflare Free plan only (no paid Workers, no Containers).
 // Satu Worker melayani workbench statis (Workers Static Assets) + API /api/*.
+// Secrets (tidak ditulis di sini): API_TOKEN, GH_DISPATCH_TOKEN.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "video-shotcraft",
@@ -16,7 +17,13 @@
   ],
   "vars": {
     "MAX_ASSET_BYTES": "52428800",
-    "MAX_MANIFEST_BYTES": "2097152"
+    "MAX_MANIFEST_BYTES": "2097152",
+    "MAX_OUTPUT_BYTES": "94371840",
+    "MAX_ACTIVE_JOBS": "1",
+    "GH_OWNER": "harvey-moeid",
+    "GH_REPO": "video-shotcraft",
+    "GH_REF": "main",
+    "RENDER_WORKFLOW": "render.yml"
   },
   "observability": { "enabled": false }
 }
