@@ -6,7 +6,7 @@ import { Timeline } from "./timeline/Timeline";
 import { resetProject, useStore } from "./store";
 import { seekTo, togglePlay } from "./playerRef";
 import type { ProjectData } from "./types";
-import { applyLocaleToDocument, LOCALES, useLocale, useT, type Locale } from "./i18n";
+import { applyLocaleToDocument, LOCALES, useLocale, useT, type Locale, type StringKey } from "./i18n";
 import type { ExportError } from "./export-errors";
 
 const isEditable = (el: EventTarget | null) =>
@@ -41,6 +41,20 @@ const startSplit = (
   window.addEventListener("pointerup", up, { once: true });
 };
 
+/** Error dari dev server (ExportError) atau dari Worker ({ code, message }). */
+type AnyExportError = { code: string; details?: string; message?: string };
+
+/** Teks error yang selalu terisi: terjemahan i18n -> message dari server -> code mentah.
+ *  t() mengembalikan undefined untuk key yang tidak ada (mis. "unauthorized" dari Worker),
+ *  jadi harus ada fallback supaya alert tidak pernah menampilkan "undefined". */
+const describeExportError = (
+  t: (key: StringKey) => string,
+  error: AnyExportError,
+): string => {
+  const base = t(`export.${error.code}` as StringKey) || error.message || error.code;
+  return error.details ? `${base}\n${error.details}` : base;
+};
+
 /** 导出成片：提交当前工程给 dev server 的 Remotion 渲染任务，轮询进度 */
 const ExportButton: React.FC = () => {
   const t = useT();
@@ -65,13 +79,22 @@ const ExportButton: React.FC = () => {
 
   const start = async () => {
     const project = useStore.getState().project;
-    const r = await fetch("/api/export", { method: "POST", body: JSON.stringify({ project }) });
-    const j = await r.json();
+    let r: Response;
+    try {
+      r = await fetch("/api/export", { method: "POST", body: JSON.stringify({ project }) });
+    } catch {
+      window.alert(t("export.startFailed"));
+      return;
+    }
+    // Respons non-JSON (mis. 404 HTML dari static assets) tidak boleh membuat handler crash.
+    const j = await r.json().catch(() => ({} as { id?: string; error?: AnyExportError }));
     if (!r.ok) {
-      const error: ExportError | undefined = j.error;
-      window.alert(error
-        ? t(`export.${error.code}`) + (error.details ? `\n${error.details}` : "")
-        : t("export.startFailed"));
+      const error: AnyExportError | undefined = j.error;
+      window.alert(
+        error
+          ? describeExportError(t, error)
+          : `${t("export.startFailed")} (HTTP ${r.status})`,
+      );
       return;
     }
     setJob({ id: j.id, status: "running", progress: 0 });
@@ -106,7 +129,7 @@ const ExportButton: React.FC = () => {
     return (
       <button
         className="btn danger"
-        title={t(`export.${error.code}`) + (error.details ? `\n${error.details}` : "")}
+        title={describeExportError(t, error)}
         onClick={start}
       >
         {t("export.failedRetry")}
