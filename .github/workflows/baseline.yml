@@ -1,0 +1,103 @@
+name: Baseline (phase 1)
+
+# Menjalankan baseline upstream tanpa mengubah kode: install, test, build, inventaris,
+# dan render nyata 1 frame + klip pendek. Hanya jalan di branch chore/baseline.
+on:
+  push:
+    branches: [chore/baseline]
+    paths:
+      - '.github/workflows/baseline.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: baseline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: workbench/package-lock.json
+
+      - name: Tool versions
+        run: |
+          node -v; npm -v; python3 --version
+          ffmpeg -version | head -1 || echo "ffmpeg: not found"
+
+      - name: Root unit tests (vitest)
+        if: always()
+        run: |
+          npm ci
+          npm test 2>&1 | tail -30
+
+      - name: Workbench install
+        if: always()
+        run: cd workbench && npm ci 2>&1 | tail -15
+
+      - name: Workbench typecheck
+        if: always()
+        run: cd workbench && npx tsc -b 2>&1 | tail -30
+
+      - name: Workbench build (vite)
+        if: always()
+        run: |
+          cd workbench && npx vite build 2>&1 | tail -30
+          du -sh dist || true
+
+      - name: Workbench tests (themes / platform / legacy)
+        if: always()
+        run: |
+          cd workbench
+          npm run test:themes 2>&1 | tail -15
+          npm run test:platform 2>&1 | tail -15
+          npm run test:legacy 2>&1 | tail -15
+
+      - name: Inventory (aktual, bukan klaim README)
+        if: always()
+        run: |
+          echo "demos aktif (tsx, tanpa _legacy/_fixtures):"
+          find demos -name '*.tsx' -not -path 'demos/_legacy/*' -not -path 'demos/_fixtures/*' | wc -l
+          echo "demos legacy (tsx):"
+          find demos/_legacy -name '*.tsx' | wc -l
+          echo "per kategori:"
+          for d in camera data effects interaction opening outro rhythm transition typography ui-entrance; do
+            printf "%s: " $d; find demos/$d -name '*.tsx' | wc -l
+          done
+          echo "BGM:"; ls -la assets/audio/bgm
+          echo "ukuran repo (tanpa .git):"; du -sh --exclude=.git --exclude=node_modules .
+          echo "remotion compositions:"
+          cd workbench && npx remotion compositions src/remotion/index.ts 2>&1 | tail -20
+
+      - name: Render nyata - 1 still (Main, props default)
+        if: always()
+        run: |
+          cd workbench
+          mkdir -p out
+          npx remotion still src/remotion/index.ts Main out/still.png --frame=0 2>&1 | tail -25
+          ls -la out || true
+
+      - name: Render nyata - klip pendek MP4 + ffprobe
+        if: always()
+        run: |
+          cd workbench
+          npx remotion render src/remotion/index.ts Main out/clip.mp4 --frames=0-59 --codec=h264 2>&1 | tail -25
+          ls -la out || true
+          ffprobe -v error -show_entries stream=codec_name,width,height,r_frame_rate,duration -of default=nw=1 out/clip.mp4 || true
+
+      - name: Upload baseline outputs (sementara, bukan penyimpanan permanen)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-out
+          path: workbench/out
+          retention-days: 3
+          if-no-files-found: ignore
