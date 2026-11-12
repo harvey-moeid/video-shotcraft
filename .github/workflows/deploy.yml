@@ -1,0 +1,56 @@
+name: Deploy (Cloudflare)
+
+# Manual saja (workflow_dispatch). Deploy ke production butuh persetujuan eksplisit user.
+# Secrets repo yang dibutuhkan: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, STUDIO_API_TOKEN.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Ketik DEPLOY untuk melanjutkan'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-cloudflare
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ inputs.confirm == 'DEPLOY' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: workbench/package-lock.json
+
+      - name: Build workbench
+        working-directory: workbench
+        run: |
+          npm ci --no-audit --no-fund
+          npx tsc -b
+          npx vite build
+
+      - name: Worker install
+        working-directory: worker
+        run: npm install --no-audit --no-fund
+
+      - name: Deploy Worker + static assets
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          command: deploy
+          secrets: |
+            API_TOKEN
+        env:
+          API_TOKEN: ${{ secrets.STUDIO_API_TOKEN }}
