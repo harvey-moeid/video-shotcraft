@@ -1,0 +1,73 @@
+name: Baseline render (phase 1)
+
+# Render nyata di runner: compositions, 1 still, klip pendek MP4, ffprobe.
+# Terpisah dari baseline.yml supaya log pendek dan exit code tidak tertutup pipe.
+on:
+  push:
+    branches: [chore/baseline]
+    paths:
+      - '.github/workflows/baseline-render.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: baseline-render-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: workbench
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: workbench/package-lock.json
+
+      - name: Install ffmpeg + chromium deps
+        working-directory: .
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -version | head -1
+
+      - name: npm ci
+        run: npm ci --no-audit --no-fund 2>&1 | tail -3
+
+      - name: Generate index
+        run: node scripts/gen-index.mjs 2>&1 | tail -8
+
+      - name: Remotion compositions
+        run: |
+          set -o pipefail
+          npx remotion compositions src/remotion/index.ts 2>&1 | tail -15
+
+      - name: Render still (frame 0)
+        run: |
+          set -o pipefail
+          mkdir -p out
+          npx remotion still src/remotion/index.ts Main out/still.png --frame=0 2>&1 | tail -15
+          ls -la out
+
+      - name: Render MP4 (60 frames) + ffprobe
+        run: |
+          set -o pipefail
+          npx remotion render src/remotion/index.ts Main out/clip.mp4 --frames=0-59 --codec=h264 2>&1 | tail -15
+          ls -la out
+          ffprobe -v error -show_entries stream=codec_name,width,height,r_frame_rate,nb_frames -of default=nw=1 out/clip.mp4
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: baseline-render-out
+          path: workbench/out
+          retention-days: 3
+          if-no-files-found: ignore

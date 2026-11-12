@@ -1,0 +1,22 @@
+// Wrangler config — Cloudflare Free plan only (no paid Workers, no Containers).
+// Satu Worker melayani workbench statis (Workers Static Assets) + API /api/*.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "video-shotcraft",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-06-01",
+  "assets": {
+    "directory": "../workbench/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "r2_buckets": [
+    { "binding": "BUCKET", "bucket_name": "video-shotcraft" }
+  ],
+  "vars": {
+    "MAX_ASSET_BYTES": "52428800",
+    "MAX_MANIFEST_BYTES": "2097152"
+  },
+  "observability": { "enabled": false }
+}
