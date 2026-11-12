@@ -1,9 +1,9 @@
 name: CI (Cloudflare adaptation)
 
-# Validasi Worker + build workbench + dry-run deploy. Tidak men-deploy apa pun.
+# Validasi Worker + build workbench + dry-run deploy + uji e2e lokal render. Tidak men-deploy apa pun.
 on:
   pull_request:
-    branches: [cloudflare-free]
+    branches: [cloudflare-free, main]
   push:
     branches: [cloudflare-free]
 
@@ -45,3 +45,57 @@ jobs:
       - name: Wrangler dry-run (validasi config, bundle, assets)
         working-directory: worker
         run: npm run dry-run
+
+  render-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      E2E_TOKEN: e2e-local-token-0123456789abcdef
+      E2E_BASE: http://127.0.0.1:8787
+      CI: 'true'
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: workbench/package-lock.json
+
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+
+      - name: Workbench install + build (static assets)
+        working-directory: workbench
+        run: |
+          set -o pipefail
+          npm ci --no-audit --no-fund 2>&1 | tail -3
+          node scripts/gen-index.mjs 2>&1 | tail -3
+          npx tsc -b
+          npx vite build 2>&1 | tail -3
+
+      - name: Worker install
+        working-directory: worker
+        run: npm install --no-audit --no-fund 2>&1 | tail -3
+
+      - name: Start local Worker (wrangler dev, R2 lokal, dispatch dry-run)
+        working-directory: worker
+        run: |
+          nohup npx wrangler dev --local --port 8787 \
+            --var API_TOKEN:"$E2E_TOKEN" --var DISPATCH_DRY_RUN:1 \
+            > ../wrangler-dev.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS "$E2E_BASE/api/health" > /dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          curl -fsS "$E2E_BASE/api/health" || { tail -30 ../wrangler-dev.log; exit 1; }
+
+      - name: E2E render (job API + runner + Remotion)
+        run: node render/e2e-local.mjs
+
+      - name: Worker log (tail, saat gagal)
+        if: failure()
+        run: tail -40 wrangler-dev.log || true
