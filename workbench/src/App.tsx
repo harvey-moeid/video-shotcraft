@@ -8,6 +8,9 @@ import { seekTo, togglePlay } from "./playerRef";
 import type { ProjectData } from "./types";
 import { applyLocaleToDocument, LOCALES, useLocale, useT, type Locale, type StringKey } from "./i18n";
 import type { ExportError } from "./export-errors";
+import { CloudExportButton } from "./CloudExportButton";
+import { useMs } from "./mobileStrings";
+import "./mobile.css";
 
 const isEditable = (el: EventTarget | null) =>
   el instanceof HTMLElement &&
@@ -55,8 +58,8 @@ const describeExportError = (
   return error.details ? `${base}\n${error.details}` : base;
 };
 
-/** 导出成片：提交当前工程给 dev server 的 Remotion 渲染任务，轮询进度 */
-const ExportButton: React.FC = () => {
+/** 导出成片（本地 dev server）：提交当前工程给 dev server 的 Remotion 渲染任务，轮询进度 */
+const LocalExportButton: React.FC = () => {
   const t = useT();
   const [job, setJob] = useState<{
     id: string;
@@ -147,8 +150,14 @@ const ExportButton: React.FC = () => {
   );
 };
 
+/** Dev (npm run dev): render lokal lewat Vite. Build produksi (workers.dev): render cloud lewat Worker. */
+const ExportButton: React.FC = () => (import.meta.env.DEV ? <LocalExportButton /> : <CloudExportButton />);
+
+type MobileTab = "library" | "inspector" | "timeline";
+
 export const App: React.FC = () => {
   const t = useT();
+  const ms = useMs();
   const locale = useLocale((s) => s.locale);
   const setLocale = useLocale((s) => s.setLocale);
   useEffect(() => applyLocaleToDocument(locale), [locale]);
@@ -163,6 +172,18 @@ export const App: React.FC = () => {
   const [libW, setLibW] = usePanelSize("wb-lib-w", 224);
   const [inspW, setInspW] = usePanelSize("wb-insp-w", 300);
   const [tlH, setTlH] = usePanelSize("wb-tl-h", 264);
+  /** Hanya dipakai di layar sempit (CSS menyembunyikan panel lain); di desktop diabaikan. */
+  const [mobileTab, setMobileTab] = useState<MobileTab>("timeline");
+
+  // Setelah item ditambahkan dari library lewat tombol "+", tampilkan timeline di layar sempit.
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 820px)");
+    const onAdded = () => {
+      if (mq.matches) setMobileTab("timeline");
+    };
+    window.addEventListener("wb:clip-added", onAdded);
+    return () => window.removeEventListener("wb:clip-added", onAdded);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -215,8 +236,14 @@ export const App: React.FC = () => {
     });
   };
 
+  const tabs: { id: MobileTab; icon: string; label: string }[] = [
+    { id: "library", icon: "▦", label: ms("tab.library") },
+    { id: "inspector", icon: "⚙", label: t("insp.title") },
+    { id: "timeline", icon: "≣", label: ms("tab.timeline") },
+  ];
+
   return (
-    <div className="app">
+    <div className="app" data-tab={mobileTab}>
       <header className="topbar">
         <span className="logo">ShotCraft <b>Workbench</b></span>
         <input
@@ -268,7 +295,7 @@ export const App: React.FC = () => {
       </header>
 
       <main className="main">
-        <div className="panel-wrap" style={{ width: libW }}>
+        <div className="panel-wrap pw-lib" style={{ width: libW }}>
           <LibraryPanel />
         </div>
         <div
@@ -288,7 +315,7 @@ export const App: React.FC = () => {
             startSplit(e, (dx) => setInspW(clamp(start - dx, 220, 500)));
           }}
         />
-        <div className="panel-wrap" style={{ width: inspW }}>
+        <div className="panel-wrap pw-insp" style={{ width: inspW }}>
           <Inspector />
         </div>
       </main>
@@ -301,9 +328,23 @@ export const App: React.FC = () => {
           startSplit(e, (_dx, dy) => setTlH(clamp(start - dy, 150, 600)));
         }}
       />
-      <div className="panel-wrap" style={{ height: tlH }}>
+      <div className="panel-wrap pw-tl" style={{ height: tlH }}>
         <Timeline />
       </div>
+
+      <nav className="mobile-tabs">
+        {tabs.map((tb) => (
+          <button
+            key={tb.id}
+            className={`mobile-tab${mobileTab === tb.id ? " on" : ""}`}
+            aria-pressed={mobileTab === tb.id}
+            onClick={() => setMobileTab(tb.id)}
+          >
+            <span className="ico" aria-hidden>{tb.icon}</span>
+            {tb.label}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 };

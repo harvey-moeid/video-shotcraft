@@ -10,9 +10,10 @@ import { importProject, useStore } from "../store";
 import { sfxUsage } from "../projectImport";
 import { BGM_LIB, MEDIA_ITEMS } from "../mediaManifest";
 import { PROJ_DIR, PROJ_HAS_MANIFEST, PROJ_LINKED } from "../projMeta";
-import { setDragPayload } from "../dnd";
+import { addPayloadToTimeline, setDragPayload } from "../dnd";
 import { ThemePanel } from './ThemePanel';
 import { cardName, cardSummary, useT, useTx } from "../i18n";
+import { useMs } from "../mobileStrings";
 
 const TABS = [
   { id: "media", key: "lib.tab.media" },
@@ -153,6 +154,7 @@ const groupBy = <T,>(items: T[], key: (t: T) => string) => {
 export const LibraryPanel: React.FC = () => {
   const t = useT();
   const tx = useTx();
+  const ms = useMs();
   const setPreview = useStore((s) => s.setPreview);
   const [tab, setTab] = useState<TabId>(PROJ_LINKED ? "media" : "cards");
   // 折叠分组默认收起，点击标题展开
@@ -164,6 +166,22 @@ export const LibraryPanel: React.FC = () => {
       else next.add(cat);
       return next;
     });
+
+  /** Tombol "+" untuk layar sentuh (CSS menyembunyikannya di desktop bermouse) */
+  const AddButton: React.FC<{ payload: Parameters<typeof setDragPayload>[1] }> = ({ payload }) => (
+    <button
+      type="button"
+      className="lib-add"
+      aria-label={ms("lib.add")}
+      title={ms("lib.add")}
+      onClick={(e) => {
+        e.stopPropagation();
+        addPayloadToTimeline(payload);
+      }}
+    >
+      +
+    </button>
+  );
 
   /** 网格单元通用外壳：点击=中屏预览，拖拽=上轨 */
   const Cell: React.FC<{
@@ -182,6 +200,7 @@ export const LibraryPanel: React.FC = () => {
       title={`${name}${title ? `\n${title}` : ""}\n${t("lib.cellHint")}`}
     >
       {children}
+      <AddButton payload={payload} />
       <div className="lib-cell-name">{name}</div>
       {meta && <div className="lib-cell-meta dim">{meta}</div>}
     </div>
@@ -218,6 +237,7 @@ export const LibraryPanel: React.FC = () => {
       <span className="lib-dot" style={{ background: dot }} />
       <span className="lib-name">{name}</span>
       {meta && <span className="lib-dur">{meta}</span>}
+      <AddButton payload={payload} />
     </div>
   );
 
@@ -243,7 +263,7 @@ export const LibraryPanel: React.FC = () => {
   const projectAudio = MEDIA_ITEMS.filter((m) => m.kind === "audio");
   const projectVisual = MEDIA_ITEMS.filter((m) => m.kind !== "audio");
 
-  // 动效库：工作台原生卡靳前，然后按画廊分类
+  // 动效库：工作台原生卡靖前，然后按画廊分类
   const motionGroups = ["工作台", ...DEMO_CATEGORIES]
     .map((cat) => ({ cat, cards: motionCards.filter((c) => c.category === cat) }))
     .filter((g) => g.cards.length > 0);
