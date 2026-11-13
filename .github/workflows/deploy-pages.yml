@@ -45,7 +45,7 @@ jobs:
                   assets[name] = hashlib.md5(path.read_bytes()).hexdigest()[:8]
           if not assets:
               raise SystemExit('No known static assets found to stamp')
-          pattern = re.compile(r'(?P<attr>href|src)="\\./(?P<name>' + '|'.join(map(re.escape, assets)) + r')(?:\\?v=[^"]*)?"')
+          pattern = re.compile(r'(?P<attr>href|src)="[.]\/(?P<name>' + '|'.join(map(re.escape, assets)) + r')(?:[?]v=[^"]*)?"')
           for html in sorted(site.glob('*.html')):
               content = html.read_text(encoding='utf-8')
               stamped, hits = pattern.subn(lambda m: f'{m["attr"]}="./{m["name"]}?v={assets[m["name"]]}"', content)
