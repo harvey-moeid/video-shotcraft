@@ -52,13 +52,13 @@ try {
     body: PNG,
   });
   check("PUT aset", r.status === 200, `status ${r.status}`);
-  r = await req("PUT", \`/api/projects/\${PROJECT}/assets/audio/e2e-nested-test.wav\`, {
+  r = await req("PUT", `/api/projects/${PROJECT}/assets/audio/e2e-nested-test.wav`, {
     headers: { "content-type": "audio/wav" }, body: NESTED_ASSET,
   });
-  check("PUT nested asset", r.status === 200, \`status \${r.status}\`);
-  r = await req("GET", \`/api/projects/\${PROJECT}/assets/audio/e2e-nested-test.wav\`);
+  check("PUT nested asset", r.status === 200, `status ${r.status}`);
+  r = await req("GET", `/api/projects/${PROJECT}/assets/audio/e2e-nested-test.wav`);
   const nested = Buffer.from(await r.arrayBuffer());
-  check("GET nested asset", r.status === 200 && nested.equals(NESTED_ASSET), \`status \${r.status}\`);
+  check("GET nested asset", r.status === 200 && nested.equals(NESTED_ASSET), `status ${r.status}`);
 
 
   // validasi endpoint render
