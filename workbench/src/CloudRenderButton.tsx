@@ -67,17 +67,45 @@ export const CloudRenderButton: React.FC = () => {
     const savedId = sessionStorage.getItem(JOB_KEY);
     if (!savedId || !sessionStorage.getItem(TOKEN_KEY)) return;
     let active = true;
-    request(`/jobs/${savedId}`)
-      .then(async (response) => {
-        const latest: CloudJob = (await response.json()).job;
+    const resume = async () => {
+      try {
+        const initialResponse = await request(`/jobs/${savedId}`);
+        let latest: CloudJob = (await initialResponse.json()).job;
         if (!active) return;
         setJob(latest);
-        setMessage(latest.status === "succeeded" ? "Render terakhir selesai. Unduh MP4 atau render ulang." :
-          latest.status === "failed" ? (latest.error || "Render terakhir gagal.") : "Melanjutkan pemantauan render cloud…");
-      })
-      .catch(() => {
+        if (latest.status === "queued" || latest.status === "running") {
+          setBusy(true);
+          setMessage("Melanjutkan pemantauan render cloud…");
+          const deadline = Date.now() + 26 * 60 * 1000;
+          while (active && Date.now() < deadline) {
+            await sleep(2500);
+            if (!active) return;
+            const response = await request(`/jobs/${savedId}`);
+            latest = (await response.json()).job;
+            if (!active) return;
+            setJob(latest);
+            if (latest.status === "succeeded") {
+              setMessage("Render terakhir selesai. Unduh MP4 atau render ulang.");
+              return;
+            }
+            if (latest.status === "failed") {
+              setMessage(latest.error || "Render terakhir gagal.");
+              return;
+            }
+          }
+          if (active) setMessage("Pemantauan berhenti karena batas waktu. Periksa log GitHub Actions.");
+        } else if (latest.status === "succeeded") {
+          setMessage("Render terakhir selesai. Unduh MP4 atau render ulang.");
+        } else {
+          setMessage(latest.error || "Render terakhir gagal.");
+        }
+      } catch {
         if (active) setMessage("Tidak dapat memulihkan status render terakhir.");
-      });
+      } finally {
+        if (active) setBusy(false);
+      }
+    };
+    void resume();
     return () => { active = false; };
   }, []);
 
