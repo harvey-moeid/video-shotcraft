@@ -159,8 +159,8 @@ demo 全部 schema 为空（时间/图层可编辑，属性不可编辑）——
 - Worker secrets：`API_TOKEN`、`GH_DISPATCH_TOKEN`。
 - GitHub Actions repo variable：`STUDIO_BASE_URL`（Worker HTTPS URL）。
 - GitHub Actions repo secret：`STUDIO_API_TOKEN`（必须与 Worker 的 `API_TOKEN` 相同）。
-- `GH_DISPATCH_TOKEN` 必须 memiliki izin Actions: write pada repository render.
-- Runner masih memakai GitHub-hosted Actions dan batas output Worker saat ini 90 MiB; render sangat besar dapat ditolak.
+- `GH_DISPATCH_TOKEN` harus memiliki izin `Actions: write` pada repository render.
+- Runner masih menggunakan GitHub-hosted Actions dan batas output Worker saat ini 90 MiB; render berukuran sangat besar dapat ditolak.
 
 Keamanan dan batas:
 - Token tidak disimpan permanen oleh UI, tetapi tetap dapat diakses JavaScript pada origin yang sama selama sesi aktif. Jangan gunakan Workbench dari perangkat/browser yang tidak dipercaya; gunakan tombol Token untuk mengganti token sesi.
