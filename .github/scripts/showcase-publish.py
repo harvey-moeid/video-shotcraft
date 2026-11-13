@@ -190,10 +190,10 @@ def main():
          str(manifest_path), '--clobber'])
     # Do not trigger Pages deployment here: storing a submission is not a production publish.
     publish_note = (f'\n\n维护者可在 [手动发布 Gallery]({PAGES_WORKFLOW_URL}) 中确认后发布。'
-                    if PAGES_WORKFLOW_URL else '\n\nGallery 尚 belum dipublikasikan; maintainer perlu menjalankan workflow Pages secara manual.')
+                    if PAGES_WORKFLOW_URL else '\n\nGallery belum dipublikasikan. Maintainer perlu menjalankan workflow Pages secara manual.')
     run(['gh', 'issue', 'comment', str(issue), '--body',
          f'✅ 投稿已 diproses dan disimpan ke showcase-media release.\n\n'
-         f'Konten belum otomatis tampil di Gallery karena deployment dipisahkan dari proses persetujuan.'
+         f'The submission is stored but is not yet visible in the Gallery because publishing is a separate manual action.'
          f'{publish_note}\n\nTerima kasih atas投稿nya!'])
     run(['gh', 'issue', 'close', str(issue), '--reason', 'completed'])
 
