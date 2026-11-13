@@ -3,14 +3,14 @@
 
 流程：解析投稿 issue 的表单正文 → 下载视频（issue 附件或外部直链）→
 ffmpeg 规整成 h264 mp4 + 抽 poster → 转存到 showcase-media release →
-更新 release 上的 showcase.json → 触发 deploy-pages 重新部署 → 回帖并关闭
-issue。投稿媒体与 showcase.json 全程只存 release 资产，不进 git。
+更新 release 上的 showcase.json → 回帖并关闭 issue。投稿媒体与 showcase.json 全程只存 release 资产，不进 git。
+Gallery 的 GitHub Pages 部署必须由维护者单独手动触发。
 
 字段解析锚点是 issue form 各字段的 label（GitHub 渲染为 "### <label>"），
 与 .github/ISSUE_TEMPLATE/showcase.yml 一一对应，两边必须同步改。
 
 环境变量（workflow 注入）：GH_TOKEN GH_REPO ISSUE_NUMBER ISSUE_BODY
-ISSUE_USER ISSUE_CREATED_AT RUN_ID
+ISSUE_USER ISSUE_CREATED_AT RUN_ID GITHUB_SERVER_URL
 """
 import json
 import os
@@ -23,7 +23,9 @@ from pathlib import Path
 
 RELEASE_TAG = 'showcase-media'
 MAX_BYTES = 300 * 1024 * 1024  # 单支投稿上限 300MB
-SHOWCASE_URL = 'https://vincentwei1021.github.io/video-shotcraft/showcase.html'
+GITHUB_SERVER_URL = os.environ.get('GITHUB_SERVER_URL', 'https://github.com').rstrip('/')
+GH_REPO = os.environ.get('GH_REPO', '')
+PAGES_WORKFLOW_URL = f'{GITHUB_SERVER_URL}/{GH_REPO}/actions/workflows/deploy-pages.yml' if GH_REPO else ''
 
 # 与 showcase.yml 各字段 label 一致
 FIELD_TITLE = '作品名'
@@ -186,11 +188,13 @@ def main():
 
     run(['gh', 'release', 'upload', RELEASE_TAG, str(mp4), str(poster),
          str(manifest_path), '--clobber'])
-    # GITHUB_TOKEN 的 push 不触发 workflow，但显式 workflow_dispatch 可以
-    run(['gh', 'workflow', 'run', 'deploy-pages.yml'])
+    # Do not trigger Pages deployment here: storing a submission is not a production publish.
+    publish_note = (f'\n\n维护者可在 [手动发布 Gallery]({PAGES_WORKFLOW_URL}) 中确认后发布。'
+                    if PAGES_WORKFLOW_URL else '\n\nGallery belum dipublikasikan. Maintainer perlu menjalankan workflow Pages secara manual.')
     run(['gh', 'issue', 'comment', str(issue), '--body',
-         f'🎉 已发布！你的作品几分钟后会出现在 [Showcase 页]({SHOWCASE_URL})。\n\n'
-         f'需要修改或下架，随时在本 issue 留言或开新 issue。感谢投稿！'])
+         f'✅ Submission has been processed and saved to the showcase-media release.\n\n'
+         f'The submission is stored but is not yet visible in the Gallery because publishing is a separate manual action.'
+         f'{publish_note}\n\nThank you for contributing!'])
     run(['gh', 'issue', 'close', str(issue), '--reason', 'completed'])
 
 
