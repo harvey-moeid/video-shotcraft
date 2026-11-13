@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useStore } from "./store";
 
 type CloudJob = {
@@ -12,6 +12,7 @@ type CloudJob = {
 
 const TOKEN_KEY = "shotcraft-cloud-token-session";
 const PROJECT_KEY = "shotcraft-cloud-project-id";
+const JOB_KEY = "shotcraft-cloud-last-job";
 const API = "/api";
 const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
@@ -61,6 +62,24 @@ export const CloudRenderButton: React.FC = () => {
     }
     return response;
   };
+
+  useEffect(() => {
+    const savedId = sessionStorage.getItem(JOB_KEY);
+    if (!savedId || !sessionStorage.getItem(TOKEN_KEY)) return;
+    let active = true;
+    request(`/jobs/${savedId}`)
+      .then(async (response) => {
+        const latest: CloudJob = (await response.json()).job;
+        if (!active) return;
+        setJob(latest);
+        setMessage(latest.status === "succeeded" ? "Render terakhir selesai. Klik Cloud render untuk mengunduh ulang." :
+          latest.status === "failed" ? (latest.error || "Render terakhir gagal.") : "Melanjutkan pemantauan render cloud…");
+      })
+      .catch(() => {
+        if (active) setMessage("Tidak dapat memulihkan status render terakhir.");
+      });
+    return () => { active = false; };
+  }, []);
 
   const configureToken = () => {
     const value = window.prompt("Masukkan API_TOKEN Worker Cloudflare (minimal 24 karakter). Token hanya disimpan selama tab/sesi browser ini.");
@@ -124,6 +143,7 @@ export const CloudRenderButton: React.FC = () => {
       const newJob: CloudJob = created.job;
       if (!newJob?.id) throw new Error("Worker tidak mengembalikan ID render job.");
       setJob(newJob);
+      sessionStorage.setItem(JOB_KEY, newJob.id);
       setMessage("Render berjalan di cloud…");
 
       const deadline = Date.now() + 26 * 60 * 1000;
