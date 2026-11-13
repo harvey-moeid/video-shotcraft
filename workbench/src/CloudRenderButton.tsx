@@ -24,6 +24,17 @@ const projectId = () => {
   return id;
 };
 
+const contentTypeFor = (file: string, detected: string) => {
+  if (detected && detected !== "application/octet-stream") return detected;
+  const ext = file.split(".").pop()?.toLowerCase();
+  const types: Record<string, string> = {
+    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif",
+    mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", m4a: "audio/mp4", mp4: "video/mp4", webm: "video/webm",
+    woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf", otf: "font/otf",
+  };
+  return types[ext ?? ""] ?? detected;
+};
+
 const safeAssetPath = (value: string) => {
   const path = value.replace(/^\/+/, "").replace(/\\/g, "/");
   const parts = path.split("/");
