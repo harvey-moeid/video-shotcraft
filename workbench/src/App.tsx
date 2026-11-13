@@ -8,6 +8,7 @@ import { seekTo, togglePlay } from "./playerRef";
 import type { ProjectData } from "./types";
 import { applyLocaleToDocument, LOCALES, useLocale, useT, type Locale, type StringKey } from "./i18n";
 import type { ExportError } from "./export-errors";
+import { CloudRenderButton } from "./CloudRenderButton";
 
 const isEditable = (el: EventTarget | null) =>
   el instanceof HTMLElement &&
@@ -234,6 +235,7 @@ export const App: React.FC = () => {
         </button>
         <span className="tl-sep" />
         <ExportButton />
+        <CloudRenderButton />
         <button className="btn" onClick={exportJson}>{t("exportJson")}</button>
         <button className="btn" onClick={() => fileRef.current?.click()}>{t("import")}</button>
         <button

@@ -143,7 +143,32 @@ demo 全部 schema 为空（时间/图层可编辑，属性不可编辑）——
   同帧 PNG 逐像素比对（需 python3 + Pillow），差异像素 < 0.1% 视为一致。退出码 0 一致 / 1 有差异 /
   2 无法得出结论（缺 Pillow、比对未执行）——不会假绿。改过清单或 Main.tsx 的时间表后跑一次。
 
-## 6. 已知边界
+## 6. Cloud Render（Cloudflare Worker + GitHub Actions）
+
+浏览器工作台顶栏提供 **Cloud render**，用于在部署后的静态 Workbench 中提交云端 MP4 渲染；原有 Vite 本地 Export 仍保留，两者是不同通道。
+
+流程：
+1. 首次点击 Cloud render 时输入 Worker 的 `API_TOKEN`。前端只放在当前浏览器 tab 的 `sessionStorage`，不写入工程 JSON、R2 或仓库。
+2. 当前工程 JSON 保存到 Worker 绑定的 R2 bucket。
+3. 工作台扫描 clip 的 `props.file`，从同源静态 Workbench 读取对应文件并上传到项目 assets；保留 `audio/...` 等相对目录。
+4. Worker 通过 GitHub Actions `workflow_dispatch` 触发 `.github/workflows/render.yml`。
+5. Runner 下载 manifest 和 assets，调用 Remotion 渲染，再把 MP4 上传到 R2。前端轮询 job，成功后通过带授权的请求下载 MP4。
+
+部署前提：
+- Worker 已部署包含嵌套 asset path 支持的版本。
+- Worker secrets：`API_TOKEN`、`GH_DISPATCH_TOKEN`。
+- GitHub Actions repo variable：`STUDIO_BASE_URL`（Worker HTTPS URL）。
+- GitHub Actions repo secret：`STUDIO_API_TOKEN`（必须与 Worker 的 `API_TOKEN` 相同）。
+- `GH_DISPATCH_TOKEN` harus memiliki izin `Actions: write` pada repository render.
+- Runner masih menggunakan GitHub-hosted Actions dan batas output Worker saat ini 90 MiB; render berukuran sangat besar dapat ditolak.
+
+Keamanan dan batas:
+- Token tidak disimpan permanen oleh UI, tetapi tetap dapat diakses JavaScript pada origin yang sama selama sesi aktif. Jangan gunakan Workbench dari perangkat/browser yang tidak dipercaya; gunakan tombol Token untuk mengganti token sesi.
+- Aset yang diunggah dibatasi oleh whitelist content type dan `MAX_ASSET_BYTES`; nama path divalidasi di Worker dan runner sebelum ditulis ke `workbench/public`.
+- Refresh halaman dapat memulihkan ID job terakhir selama sesi tab dan token masih tersedia.
+- Cloud Render belum membuktikan keberhasilan render production hanya karena CI lokal lulus. Sebelum dinyatakan siap produksi, jalankan satu render nyata melalui Worker deployed dan pastikan MP4 dapat diunduh.
+
+## 7. 已知边界
 
 - 同轨允许 clip 重叠（层级用多轨表达）；变速为匀速重映射（无曲线变速）。
 - 卡片库（demo / 原生卡）按 30fps 编排（`CARD_FPS`），成片单元卡按成片清单的 fps（`CardDef.sourceFps`）；
