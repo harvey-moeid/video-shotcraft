@@ -23,7 +23,7 @@ export interface Env {
 }
 
 const PROJECT_ID = /^[a-z0-9][a-z0-9-]{2,63}$/;
-const ASSET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const ASSET_NAME = /^(?:[A-Za-z0-9][A-Za-z0-9._-]{0,127}\/)*[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const JOB_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ALLOWED_ASSET_TYPES = [
   "image/png",
@@ -396,8 +396,10 @@ async function handleProjects(request: Request, env: Env, parts: string[]): Prom
         truncated: listed.truncated,
       });
     }
-    if (parts.length === 3) {
-      const name = parts[2] ?? "";
+    if (parts.length >= 3) {
+      let name: string;
+      try { name = parts.slice(2).map((part) => decodeURIComponent(part)).join("/"); }
+      catch { return err(400, "invalid_asset_name", "invalid asset name"); }
       if (!ASSET_NAME.test(name)) return err(400, "invalid_asset_name", "invalid asset name");
       const key = prefix + name;
       if (request.method === "GET") {
