@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import { useStore } from "./store";
 
 type CloudJob = {
@@ -37,10 +37,6 @@ export const CloudRenderButton: React.FC = () => {
   const [job, setJob] = useState<CloudJob | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [tokenReady, setTokenReady] = useState(() => Boolean(sessionStorage.getItem(TOKEN_KEY)));
-  const timer = useRef<number | null>(null);
-
-  useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
 
   const request = async (path: string, init: RequestInit = {}) => {
     const token = sessionStorage.getItem(TOKEN_KEY);
@@ -60,7 +56,6 @@ export const CloudRenderButton: React.FC = () => {
     if (!value) return;
     if (value.length < 24) { window.alert("Token minimal 24 karakter."); return; }
     sessionStorage.setItem(TOKEN_KEY, value);
-    setTokenReady(true);
     setMessage("Token tersimpan sementara di sesi browser.");
   };
 
