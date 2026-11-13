@@ -109,7 +109,7 @@ export const CloudRenderButton: React.FC = () => {
         if (!blob.size) throw new Error(`Aset kosong: ${file}`);
         await request(`/projects/${id}/assets/${file.split("/").map(encodeURIComponent).join("/")}`, {
           method: "PUT",
-          headers: { "Content-Type": blob.type || "application/octet-stream" },
+          headers: { "Content-Type": contentTypeFor(file, blob.type) },
           body: blob,
         });
       }
