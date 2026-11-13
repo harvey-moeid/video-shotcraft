@@ -15,7 +15,7 @@ const OUT_DIR = path.join(WB, "out");
 
 const JOB_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const PROJECT_ID_RE = /^[a-z0-9][a-z0-9-]{2,63}$/;
-const ASSET_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const ASSET_NAME_RE = /^(?:[A-Za-z0-9][A-Za-z0-9._-]{0,127}\/)*[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 const BASE = (process.env.STUDIO_BASE_URL ?? "").replace(/\/+$/, "");
 const TOKEN = process.env.STUDIO_API_TOKEN ?? "";
@@ -113,9 +113,10 @@ async function main() {
   for (const a of assets ?? []) {
     const name = String(a?.name ?? "");
     if (!ASSET_NAME_RE.test(name)) throw new Error("nama aset tidak valid");
-    const dest = path.join(PUBLIC_DIR, name);
-    if (path.dirname(dest) !== PUBLIC_DIR) throw new Error("path aset tidak valid");
-    const res = await api("GET", `/api/projects/${PROJECT_ID}/assets/${encodeURIComponent(name)}`);
+    const dest = path.resolve(PUBLIC_DIR, name);
+    if (!dest.startsWith(PUBLIC_DIR + path.sep)) throw new Error("path aset tidak valid");
+    mkdirSync(path.dirname(dest), { recursive: true });
+    const res = await api("GET", `/api/projects/${PROJECT_ID}/assets/${name.split("/").map(encodeURIComponent).join("/")}`);
     if (!res.ok || !res.body) throw new Error(`unduh aset gagal (HTTP ${res.status})`);
     await pipeline(Readable.fromWeb(res.body), createWriteStream(dest));
     assetCount++;
