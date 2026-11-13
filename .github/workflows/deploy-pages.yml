@@ -55,7 +55,7 @@ jobs:
           EOF
       - name: Download motion previews
         env:
-          GH_TOKEN: ${{ github.token }}}
+          GH_TOKEN: ${{ github.token }}
         run: python3 gallery/assemble-media.py site/media
       - name: Download showcase submissions
         env:
@@ -85,7 +85,7 @@ jobs:
                       if not os.path.exists(path):
                           missing.append(path)
           if missing:
-              print('missing media files:', *missing, sep='\\n  ')
+              print('missing media files:', *missing, sep='\n  ')
               sys.exit(1)
           print(f'all previews present ({len(lib["cards"])} cards checked)')
           EOF
