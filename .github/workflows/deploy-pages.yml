@@ -21,11 +21,11 @@ concurrency:
 
 jobs:
   deploy:
-    if: @${{ inputs.confirm == 'PUBLISH_GALLERY' }
+    if: ${{ inputs.confirm == 'PUBLISH_GALLERY' }
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: @${{ steps.deployment.outputs.page_url }
+      url: ${{ steps.deployment.outputs.page_url }
     steps:
       - uses: actions/checkout@v4
       - name: Assemble site
@@ -55,11 +55,11 @@ jobs:
           EOF
       - name: Download motion previews
         env:
-          GH_TOKEN: @${{ github.token }
+          GH_TOKEN: ${{ github.token }
         run: python3 gallery/assemble-media.py site/media
       - name: Download showcase submissions
         env:
-          GH_TOKEN: @${{ github.token }
+          GH_TOKEN: ${{ github.token }
         run: |
           mkdir -p site/showcase-media
           if gh release view showcase-media --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
