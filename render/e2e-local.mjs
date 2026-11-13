@@ -1,6 +1,7 @@
 // Uji end-to-end lokal (CI): Worker (wrangler dev, R2 lokal) + render-job.mjs asli + Remotion asli.
 // Tidak menyentuh Cloudflare/GitHub. Env: E2E_BASE (default http://127.0.0.1:8787), E2E_TOKEN.
 import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,6 +13,8 @@ const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
   "base64",
 );
+const NESTED_ASSET = Buffer.from("video-shotcraft nested asset e2e");
+const NESTED_ASSET_PATH = path.join(ROOT, "workbench", "public", "audio", "e2e-nested-test.wav");
 
 let failures = 0;
 const check = (name, ok, detail = "") => {
@@ -49,6 +52,14 @@ try {
     body: PNG,
   });
   check("PUT aset", r.status === 200, `status ${r.status}`);
+  r = await req("PUT", \`/api/projects/\${PROJECT}/assets/audio/e2e-nested-test.wav\`, {
+    headers: { "content-type": "audio/wav" }, body: NESTED_ASSET,
+  });
+  check("PUT nested asset", r.status === 200, \`status \${r.status}\`);
+  r = await req("GET", \`/api/projects/\${PROJECT}/assets/audio/e2e-nested-test.wav\`);
+  const nested = Buffer.from(await r.arrayBuffer());
+  check("GET nested asset", r.status === 200 && nested.equals(NESTED_ASSET), \`status \${r.status}\`);
+
 
   // validasi endpoint render
   r = await req("POST", "/api/projects/no-such-project/render");
@@ -88,6 +99,9 @@ try {
     maxBuffer: 16 * 1024 * 1024,
   });
   check("render-job.mjs exit 0", run.status === 0, `exit ${run.status}\n${String(run.stdout).slice(-1200)}\n${String(run.stderr).slice(-1200)}`);
+  const nestedOnDisk = existsSync(NESTED_ASSET_PATH) && readFileSync(NESTED_ASSET_PATH).equals(NESTED_ASSET);
+  check("runner restores nested asset path", nestedOnDisk, NESTED_ASSET_PATH);
+
 
   r = await req("GET", `/api/jobs/${jobId}`);
   const done = (await r.json()).job;
@@ -123,6 +137,8 @@ try {
   try {
     if (jobId) await req("DELETE", `/api/jobs/${jobId}`);
     await req("DELETE", `/api/projects/${PROJECT}/assets/e2e-pixel.png`);
+    await req("DELETE", `/api/projects/${PROJECT}/assets/audio/e2e-nested-test.wav`);
+    if (existsSync(NESTED_ASSET_PATH)) rmSync(NESTED_ASSET_PATH, { force: true });
     await req("DELETE", `/api/projects/${PROJECT}`);
   } catch {}
 }
