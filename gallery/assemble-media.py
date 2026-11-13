@@ -43,7 +43,9 @@ def gh(*args, **kw):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('dest')
-    # Gallery media is published in the canonical source repo by default.\n    # Forks can point at their own release without inheriting GITHUB_REPOSITORY.\n    ap.add_argument('--repo', default=os.environ.get('GALLERY_MEDIA_REPOSITORY', 'Vincentwei1021/video-shotcraft'))
+    # Gallery media is published in the canonical source repo by default.
+    # Forks can point at their own release without inheriting GITHUB_REPOSITORY.
+    ap.add_argument('--repo', default=os.environ.get('GALLERY_MEDIA_REPOSITORY', 'Vincentwei1021/video-shotcraft'))
     a = ap.parse_args()
     os.makedirs(a.dest, exist_ok=True)
     assets = json.loads(gh('release', 'view', 'gallery-media', '--repo', a.repo, '--json', 'assets'))['assets']
