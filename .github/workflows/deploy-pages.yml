@@ -55,11 +55,11 @@ jobs:
           EOF
       - name: Download motion previews
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}}
         run: python3 gallery/assemble-media.py site/media
       - name: Download showcase submissions
         env:
-          GH_TOKEN: ${{ github.token }
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p site/showcase-media
           if gh release view showcase-media --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -68,7 +68,7 @@ jobs:
           if [ -f site/showcase-media/showcase.json ]; then
             mv site/showcase-media/showcase.json site/api/showcase.json
           else
-            printf '{"items": []}\\n' > site/api/showcase.json
+            printf '{"items": []}\n' > site/api/showcase.json
           fi
       - name: Check every library preview exists
         run: |
