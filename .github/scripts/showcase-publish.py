@@ -10,7 +10,7 @@ Gallery 的 GitHub Pages 部署必须由维护者单独手动触发。
 与 .github/ISSUE_TEMPLATE/showcase.yml 一一对应，两边必须同步改。
 
 环境变量（workflow 注入）：GH_TOKEN GH_REPO ISSUE_NUMBER ISSUE_BODY
-ISSUE_USER ISSUE_CREATED_AT RUN_ID
+ISSUE_USER ISSUE_CREATED_AT RUN_ID GITHUB_SERVER_URL
 """
 import json
 import os
@@ -192,9 +192,9 @@ def main():
     publish_note = (f'\n\n维护者可在 [手动发布 Gallery]({PAGES_WORKFLOW_URL}) 中确认后发布。'
                     if PAGES_WORKFLOW_URL else '\n\nGallery belum dipublikasikan. Maintainer perlu menjalankan workflow Pages secara manual.')
     run(['gh', 'issue', 'comment', str(issue), '--body',
-         f'✅ 投稿已 diproses dan disimpan ke showcase-media release.\n\n'
+         f'✅ Submission has been processed and saved to the showcase-media release.\n\n'
          f'The submission is stored but is not yet visible in the Gallery because publishing is a separate manual action.'
-         f'{publish_note}\n\nTerima kasih atas投稿nya!'])
+         f'{publish_note}\n\nThank you for contributing!'])
     run(['gh', 'issue', 'close', str(issue), '--reason', 'completed'])
 
 
