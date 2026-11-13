@@ -72,7 +72,7 @@ export const CloudRenderButton: React.FC = () => {
         const latest: CloudJob = (await response.json()).job;
         if (!active) return;
         setJob(latest);
-        setMessage(latest.status === "succeeded" ? "Render terakhir selesai. Klik Cloud render untuk mengunduh ulang." :
+        setMessage(latest.status === "succeeded" ? "Render terakhir selesai. Unduh MP4 atau render ulang." :
           latest.status === "failed" ? (latest.error || "Render terakhir gagal.") : "Melanjutkan pemantauan render cloud…");
       })
       .catch(() => {
@@ -98,6 +98,14 @@ export const CloudRenderButton: React.FC = () => {
     a.download = `shotcraft-${id.slice(0, 8)}.mp4`;
     a.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  };
+
+  const downloadLast = async () => {
+    if (!job) return;
+    setBusy(true);
+    try { setMessage("Mengunduh MP4…"); await downloadOutput(job.id); setMessage("MP4 berhasil diunduh."); }
+    catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
   };
 
   const start = async () => {
@@ -172,8 +180,9 @@ export const CloudRenderButton: React.FC = () => {
   return (
     <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
       <button className="btn" type="button" disabled={busy} onClick={start} title="Simpan proyek ke R2, render melalui GitHub Actions, lalu unduh MP4">
-        {busy ? "Cloud render…" : job?.status === "succeeded" ? "Render cloud ✓" : "Cloud render"}
+        {busy ? "Cloud render…" : job?.status === "succeeded" ? "Render again" : "Cloud render"}
       </button>
+      {job?.status === "succeeded" && <button className="btn" type="button" disabled={busy} onClick={downloadLast}>Download MP4</button>}
       <button className="btn" type="button" disabled={busy} onClick={configureToken} title="Atur ulang token API sesi">Token</button>
       {message && <span role="status" aria-live="polite" style={{ maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: job?.status === "failed" ? "#ff8078" : "var(--text-dim)" }}>{message}</span>}
       {job?.runUrl && <a href={job.runUrl} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>Log</a>}
