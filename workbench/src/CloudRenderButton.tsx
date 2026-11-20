@@ -166,7 +166,6 @@ const fetchJobPage = async (request: Requester, cursor?: string | null): Promise
 export const CloudRenderButton: React.FC = () => {
   const [token, setToken] = useState(() => sessionStorage.getItem(TOKEN_KEY) ?? "");
   const [tokenDraft, setTokenDraft] = useState("");
-  const [showToken, setShowToken] = useState(() => !sessionStorage.getItem(TOKEN_KEY));
   const [panelOpen, setPanelOpen] = useState(() => !sessionStorage.getItem(TOKEN_KEY));
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -187,16 +186,16 @@ export const CloudRenderButton: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!panelOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (panelOpen && event.key === "Escape") {
         event.preventDefault();
         closePanel();
       }
     };
     const onPointerDown = (event: PointerEvent) => {
+      if (!panelOpen) return;
       const target = event.target as Node;
-      if (!panelRef.current?.contains(target) && !triggerRef.current?.contains(target)) closePanel(false);
+      if (!panelRef.current?.contains(target) && !triggerRef.current?.contains(target)) closePanel();
     };
     const onOpen = () => setPanelOpen(true);
     document.addEventListener("keydown", onKeyDown);
@@ -236,7 +235,6 @@ export const CloudRenderButton: React.FC = () => {
     sessionStorage.setItem(TOKEN_KEY, tokenDraft);
     setToken(tokenDraft);
     setTokenDraft("");
-    setShowToken(false);
     setMessage("Token disimpan di sesi tab ini.");
   };
 
@@ -554,7 +552,7 @@ export const CloudRenderButton: React.FC = () => {
             <label htmlFor="cloud-token">API_TOKEN Worker (minimal 24 karakter)</label>
             <input id="cloud-token" type="password" autoComplete="off" value={tokenDraft} onChange={(e) => setTokenDraft(e.target.value)} placeholder="Tempel token di sini" />
             <button className="btn primary" type="button" onClick={saveToken}>Simpan token sesi</button>
-            {token && <button className="btn" type="button" onClick={() => { sessionStorage.removeItem(TOKEN_KEY); setToken(""); setMessage("Token sesi dihapus."); setShowToken(true); }}>Hapus token</button>}
+            {token && <button className="btn" type="button" onClick={() => { sessionStorage.removeItem(TOKEN_KEY); setToken(""); setMessage("Token sesi dihapus."); }}>Hapus token</button>}
           </div>
           <div className="cloud-project-row">
             <label>
