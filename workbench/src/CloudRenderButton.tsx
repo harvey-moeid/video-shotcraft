@@ -15,6 +15,8 @@ type CloudJob = {
 type CloudProject = { id: string; name: string };
 type AssetListing = { assets?: { name: string }[] };
 type MediaKind = "image" | "video" | "audio";
+type Requester = (path: string, init?: RequestInit) => Promise<Response>;
+type JobPage = { jobs: CloudJob[]; cursor: string | null };
 
 const TOKEN_KEY = "shotcraft-cloud-token-session";
 const PROJECT_KEY = "shotcraft-cloud-project-id";
@@ -22,6 +24,8 @@ const API = "/api";
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 /** Kartu media dihitung dalam frame 30 fps (sourceFps kartu); store mengonversi ke fps proyek. */
 const SOURCE_FPS = 30;
+/** Jumlah job per halaman riwayat render. */
+const JOB_PAGE = 6;
 
 const MEDIA_TYPES = [
   "image/png",
@@ -142,6 +146,23 @@ const readLocalAsset = async (file: string): Promise<Blob> => {
   return blob;
 };
 
+/** Satu halaman riwayat job (terbaru dulu): daftar id dari Worker, lalu detail tiap job pada halaman itu. */
+const fetchJobPage = async (request: Requester, cursor?: string | null): Promise<JobPage> => {
+  const qs = new URLSearchParams({ limit: String(JOB_PAGE) });
+  if (cursor) qs.set("cursor", cursor);
+  const data = (await (await request(`/jobs?${qs.toString()}`)).json()) as { jobs?: string[]; cursor?: string | null };
+  const rows = await Promise.all(
+    (data.jobs ?? []).map(async (id): Promise<CloudJob | null> => {
+      try {
+        return (await (await request(`/jobs/${id}`)).json()).job as CloudJob;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return { jobs: rows.filter((j): j is CloudJob => !!j), cursor: data.cursor ?? null };
+};
+
 export const CloudRenderButton: React.FC = () => {
   const [token, setToken] = useState(() => sessionStorage.getItem(TOKEN_KEY) ?? "");
   const [tokenDraft, setTokenDraft] = useState("");
@@ -149,6 +170,7 @@ export const CloudRenderButton: React.FC = () => {
   const [projects, setProjects] = useState<CloudProject[]>([]);
   const [selectedProject, setSelectedProject] = useState(() => localStorage.getItem(PROJECT_KEY) ?? "");
   const [jobs, setJobs] = useState<CloudJob[]>([]);
+  const [jobCursor, setJobCursor] = useState<string | null>(null);
   const [crf, setCrf] = useState(20);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -187,15 +209,15 @@ export const CloudRenderButton: React.FC = () => {
   };
 
   /**
-   * Muat daftar proyek dan job. Sengaja TIDAK memilih proyek otomatis: proyek terpilih harus
-   * selalu proyek yang manifest-nya sudah ada di editor, supaya PUT tidak menimpa proyek lain.
+   * Muat daftar proyek dan halaman pertama riwayat job. Sengaja TIDAK memilih proyek otomatis:
+   * proyek terpilih harus selalu proyek yang manifest-nya sudah ada di editor, supaya PUT tidak
+   * menimpa proyek lain.
    */
   const loadProjectsAndJobs = useCallback(async () => {
     if (!sessionStorage.getItem(TOKEN_KEY)) return;
     try {
-      const [pr, jr] = await Promise.all([request("/projects"), request("/jobs")]);
+      const [pr, page] = await Promise.all([request("/projects"), fetchJobPage(request)]);
       const pData = (await pr.json()) as { projects?: string[] };
-      const jData = (await jr.json()) as { jobs?: string[] };
       const projectRows = await Promise.all(
         (pData.projects ?? []).map(async (id): Promise<CloudProject> => {
           try {
@@ -207,18 +229,9 @@ export const CloudRenderButton: React.FC = () => {
           }
         }),
       );
-      const jobRows = await Promise.all(
-        (jData.jobs ?? []).map(async (id): Promise<CloudJob | null> => {
-          try {
-            const r = await request(`/jobs/${id}`);
-            return (await r.json()).job as CloudJob;
-          } catch {
-            return null;
-          }
-        }),
-      );
       setProjects(projectRows.sort((a, b) => a.name.localeCompare(b.name)));
-      setJobs(jobRows.filter((j): j is CloudJob => !!j).sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+      setJobs(page.jobs);
+      setJobCursor(page.cursor);
     } catch (e) {
       setMessage(errText(e));
     }
@@ -226,6 +239,34 @@ export const CloudRenderButton: React.FC = () => {
   useEffect(() => {
     void loadProjectsAndJobs();
   }, [loadProjectsAndJobs, token]);
+
+  const loadMoreJobs = async () => {
+    if (!jobCursor) return;
+    setBusy(true);
+    try {
+      const page = await fetchJobPage(request, jobCursor);
+      setJobs((prev) => [...prev, ...page.jobs.filter((j) => !prev.some((p) => p.id === j.id))]);
+      setJobCursor(page.cursor);
+    } catch (e) {
+      setMessage(errText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteJob = async (id: string) => {
+    if (!window.confirm("Hapus job ini beserta output MP4-nya? Tindakan ini tidak bisa dibatalkan.")) return;
+    setBusy(true);
+    try {
+      await request(`/jobs/${id}`, { method: "DELETE" });
+      setJobs((prev) => prev.filter((j) => j.id !== id));
+      setMessage("Job dihapus.");
+    } catch (e) {
+      setMessage(errText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const putManifest = async (id: string) => {
     const project = useStore.getState().project;
@@ -526,8 +567,11 @@ export const CloudRenderButton: React.FC = () => {
         </div>
       )}
       <div className="cloud-jobs">
-        <b>Riwayat render ({jobs.length})</b>
-        {jobs.slice(0, 6).map((j) => (
+        <b>
+          Riwayat render ({jobs.length}
+          {jobCursor ? "+" : ""})
+        </b>
+        {jobs.map((j) => (
           <div className="cloud-job" key={j.id}>
             <span className={`cloud-status ${j.status}`}>{j.status}</span>
             <span>
@@ -544,8 +588,18 @@ export const CloudRenderButton: React.FC = () => {
                 Unduh
               </button>
             )}
+            {(j.status === "succeeded" || j.status === "failed") && (
+              <button className="mini" disabled={busy} onClick={() => void deleteJob(j.id)}>
+                Hapus
+              </button>
+            )}
           </div>
         ))}
+        {jobCursor && (
+          <button className="mini" type="button" disabled={busy || !token} onClick={() => void loadMoreJobs()}>
+            Muat lebih
+          </button>
+        )}
       </div>
       {message && (
         <div className="cloud-message" role="status" aria-live="polite">
