@@ -52,3 +52,15 @@ FASE 3 selesai, ada di `main`, dan sudah di-deploy ke production. Menunggu uji r
 1. User menjalankan uji render nyata (curl) dan mengirim JSON job; Claude membaca hasil dan log run bila gagal.
 2. Jika berhasil: uji proyek berisi klip nyata, lalu bersihkan data uji di R2.
 3. FASE 4.
+
+## FASE 4 — implementasi di PR #12 (2026-11-20)
+- Branch: `feat/fase-4-cloud-workbench`; PR: https://github.com/harvey-moeid/video-shotcraft/pull/12.
+- Implementasi UI: upload media browser → Worker/R2 (gambar PNG/JPEG/WebP/GIF, video MP4/WebM, audio MP3/WAV/OGG/M4A; maks 50 MB per file); aset ditambahkan sebagai clip timeline dan memakai object URL untuk preview browser.
+- Render cloud menyinkronkan aset lama dari `public/` jika belum ada di R2, agar proyek legacy tetap bisa dirender.
+- Kontrol CRF 15–35 diteruskan ke endpoint render dan runner.
+- Multi-project: daftar, buat, pilih, dan muat manifest/aset; daftar job dengan status, CRF, waktu, link Actions, dan unduh output.
+- Token sekarang memakai form UI dan disimpan hanya di `sessionStorage`, bukan `window.prompt`.
+- Tombol ekspor lokal disembunyikan di host non-localhost; export cloud tetap tersedia.
+- CI run #23 (44749602723) **sukses**: workbench TypeScript/build, Worker typecheck, Wrangler dry-run, dan render E2E.
+- Belum diverifikasi: uji interaktif browser pada deployment Pages/Worker, upload file nyata ke R2 production, serta render MP4 proyek nyata. Belum deploy production dan belum merge PR.
+- Catatan: upload asset limit 50 MB/file; Worker API token masih token bersama untuk seluruh API sebagaimana FASE 2/3. Review keamanan token/otorisasi multi-user bukan bagian PR ini.

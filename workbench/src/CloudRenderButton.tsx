@@ -64,7 +64,7 @@ export const CloudRenderButton: React.FC = () => {
   useEffect(()=>{void loadProjectsAndJobs();},[loadProjectsAndJobs]);
 
   const ensureProject=async()=>{
-    const id=selectedProject||makeProjectId();if(!selectedProject){setSelectedProject(id);localStorage.setItem(PROJECT_KEY,id);}
+    const id=selectedProject||makeProjectId();if(!selectedProject){setSelectedProject(id);localStorage.setItem(PROJECT_KEY,id);setProjects(prev=>[...prev,{id,name:useStore.getState().project.name||id}]);}
     const project=useStore.getState().project;
     await request(`/projects/${encodeURIComponent(id)}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(project)});
     return id;
