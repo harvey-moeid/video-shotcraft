@@ -2,6 +2,9 @@
 // FASE 2: auth token statis, penyimpanan project manifest dan aset di R2.
 // FASE 3: render job. Worker memicu workflow GitHub Actions (render.yml); runner mengambil
 // manifest/aset lewat API ini, me-render MP4 dengan Remotion, lalu mengunggah hasilnya ke R2.
+// Tindak lanjut FASE 4: riwayat job berurutan + paginasi, pemangkasan otomatis, slot job aktif atomik.
+// Catatan Free plan: satu request dibatasi 50 subrequest (termasuk operasi R2), jadi setiap jalur
+// di bawah ini menjaga jumlah operasi R2 tetap kecil dan terbatas.
 
 export interface Env {
   BUCKET: R2Bucket;
@@ -18,6 +21,8 @@ export interface Env {
   MAX_MANIFEST_BYTES?: string;
   MAX_OUTPUT_BYTES?: string;
   MAX_ACTIVE_JOBS?: string;
+  /** Jumlah job terbaru yang disimpan; yang lebih tua dipangkas otomatis saat job baru dibuat (default 20). */
+  MAX_KEPT_JOBS?: string;
   /** Hanya untuk uji lokal/CI: "1" melewati panggilan ke GitHub (job tetap queued). Jangan set di production. */
   DISPATCH_DRY_RUN?: string;
 }
@@ -42,8 +47,23 @@ const ALLOWED_ASSET_TYPES = [
   "font/otf",
 ];
 
-/** Job aktif yang lebih tua dari ini dianggap macet dan tidak dihitung (workflow timeout 30 menit). */
+/** Job aktif yang lebih tua dari ini dianggap macet dan slotnya boleh direbut (workflow timeout 30 menit). */
 const ACTIVE_TTL_MS = 60 * 60 * 1000;
+
+/** Indeks job: `jobidx/<1e14 - createdAtMs, 15 digit>-<id>`; urutan leksikografis R2 = terbaru dulu. */
+const INDEX_PREFIX = "jobidx/";
+const INDEX_EPOCH_MS = 100_000_000_000_000;
+/** Slot job aktif: satu objek per slot, dibuat dengan put kondisional (atomik). */
+const SLOT_PREFIX = "active/slot-";
+const MAX_SLOTS = 10;
+const DEFAULT_KEPT_JOBS = 20;
+const MAX_KEPT_JOBS_CAP = 500;
+/** Maksimum job yang dipangkas per request (menjaga operasi R2 < 50 di Free plan). */
+const PRUNE_BATCH = 4;
+/** Maksimum job yang diindeks ulang per panggilan reindex. */
+const REINDEX_BATCH = 15;
+const LIST_DEFAULT = 20;
+const LIST_MAX = 50;
 
 const SECURITY_HEADERS: Record<string, string> = {
   "x-content-type-options": "nosniff",
@@ -113,11 +133,23 @@ interface Job {
   runUrl?: string;
   error?: string;
   outputBytes?: number;
+  /** Nomor slot aktif yang dipegang job ini (job lama FASE 3 tidak punya; memakai penanda `active/<id>`). */
+  slot?: number;
 }
 
 const jobKey = (id: string) => `jobs/${id}/job.json`;
 const outputKey = (id: string) => `jobs/${id}/output.mp4`;
+/** Penanda aktif lama (FASE 3); hanya dibersihkan untuk job lama. */
 const activeKey = (id: string) => `active/${id}`;
+const slotKey = (n: number) => `${SLOT_PREFIX}${n}`;
+
+function indexKey(job: Pick<Job, "id" | "createdAt">): string {
+  const ts = Date.parse(job.createdAt);
+  const inverted = Math.max(0, INDEX_EPOCH_MS - (Number.isFinite(ts) ? ts : 0));
+  return `${INDEX_PREFIX}${String(inverted).padStart(15, "0")}-${job.id}`;
+}
+
+const idFromIndexKey = (key: string) => key.slice(-36);
 
 async function readJob(env: Env, id: string): Promise<Job | null> {
   const obj = await env.BUCKET.get(jobKey(id));
@@ -135,16 +167,68 @@ async function writeJob(env: Env, job: Job): Promise<void> {
   });
 }
 
-/** Hitung job aktif; penanda macet (lebih tua dari TTL) dibersihkan. */
-async function countActive(env: Env): Promise<number> {
-  const listed = await env.BUCKET.list({ prefix: "active/", limit: 100 });
+/**
+ * Rebut satu slot aktif secara atomik: put kondisional (hanya bila objek belum ada).
+ * Slot macet (lebih tua dari ACTIVE_TTL_MS) dibersihkan lalu direbut ulang.
+ * Mengembalikan nomor slot, atau null bila semua slot terpakai.
+ */
+async function acquireSlot(env: Env, jobId: string, maxActive: number): Promise<number | null> {
   const now = Date.now();
-  let n = 0;
-  for (const o of listed.objects) {
-    if (now - o.uploaded.getTime() > ACTIVE_TTL_MS) await env.BUCKET.delete(o.key);
-    else n++;
+  const options = {
+    customMetadata: { jobId, createdAt: new Date(now).toISOString() },
+    onlyIf: { etagDoesNotMatch: "*" },
+  };
+  for (let slot = 0; slot < maxActive; slot++) {
+    const key = slotKey(slot);
+    if (await env.BUCKET.put(key, "", options)) return slot;
+    const held = await env.BUCKET.head(key);
+    if (held && now - held.uploaded.getTime() > ACTIVE_TTL_MS) {
+      await env.BUCKET.delete(key);
+      if (await env.BUCKET.put(key, "", options)) return slot;
+    }
   }
-  return n;
+  return null;
+}
+
+/** Lepas slot hanya bila masih dipegang job ini (slot macet bisa sudah direbut job lain). */
+async function releaseSlot(env: Env, job: Job): Promise<void> {
+  if (job.slot === undefined) {
+    await env.BUCKET.delete(activeKey(job.id));
+    return;
+  }
+  const key = slotKey(job.slot);
+  const held = await env.BUCKET.head(key);
+  if (held?.customMetadata?.["jobId"] === job.id) await env.BUCKET.delete(key);
+}
+
+/**
+ * Pangkas job terlama di luar MAX_KEPT_JOBS (maks PRUNE_BATCH per panggilan). Job yang masih
+ * aktif tidak dihapus. Indeks urut terbaru-dulu, jadi kandidat adalah entri setelah posisi `keep`.
+ */
+async function pruneJobs(env: Env): Promise<void> {
+  const keep = Math.min(intVar(env.MAX_KEPT_JOBS, DEFAULT_KEPT_JOBS), MAX_KEPT_JOBS_CAP);
+  const listed = await env.BUCKET.list({ prefix: INDEX_PREFIX, limit: keep + PRUNE_BATCH });
+  const now = Date.now();
+  for (const entry of listed.objects.slice(keep)) {
+    const id = idFromIndexKey(entry.key);
+    const valid = JOB_ID.test(id);
+    const job = valid ? await readJob(env, id) : null;
+    if (job && (job.status === "queued" || job.status === "running") && now - Date.parse(job.createdAt) < ACTIVE_TTL_MS) {
+      continue;
+    }
+    await Promise.all([
+      env.BUCKET.delete(entry.key),
+      ...(valid ? [env.BUCKET.delete(jobKey(id)), env.BUCKET.delete(outputKey(id))] : []),
+    ]);
+  }
+}
+
+async function pruneJobsSafe(env: Env): Promise<void> {
+  try {
+    await pruneJobs(env);
+  } catch (e) {
+    console.error("prune error", e instanceof Error ? e.message : String(e));
+  }
 }
 
 /** Kembalikan status HTTP dari GitHub (0 bila jaringan gagal). Token tidak pernah dicatat. */
@@ -196,15 +280,23 @@ async function handleRender(request: Request, env: Env, projectId: string): Prom
     crf = rawCrf;
   }
 
-  const maxActive = intVar(env.MAX_ACTIVE_JOBS, 1);
-  if ((await countActive(env)) >= maxActive) {
+  const maxActive = Math.min(intVar(env.MAX_ACTIVE_JOBS, 1), MAX_SLOTS);
+  const id = crypto.randomUUID();
+  const slot = await acquireSlot(env, id, maxActive);
+  if (slot === null) {
     return err(429, "too_many_active_jobs", `max ${maxActive} active render job(s)`);
   }
 
   const now = new Date().toISOString();
-  const job: Job = { id: crypto.randomUUID(), projectId, status: "queued", crf, createdAt: now, updatedAt: now };
-  await env.BUCKET.put(activeKey(job.id), "", { customMetadata: { createdAt: now } });
-  await writeJob(env, job);
+  const job: Job = { id, projectId, status: "queued", crf, createdAt: now, updatedAt: now, slot };
+  try {
+    await writeJob(env, job);
+    await env.BUCKET.put(indexKey(job), "");
+  } catch (e) {
+    await releaseSlot(env, job).catch(() => undefined);
+    throw e;
+  }
+  await pruneJobsSafe(env);
 
   if (!dryRun) {
     const status = await dispatchWorkflow(env, job);
@@ -213,20 +305,46 @@ async function handleRender(request: Request, env: Env, projectId: string): Prom
       job.error = `GitHub dispatch failed (HTTP ${status})`;
       job.updatedAt = new Date().toISOString();
       await writeJob(env, job);
-      await env.BUCKET.delete(activeKey(job.id));
+      await releaseSlot(env, job);
       return err(502, "dispatch_failed", job.error);
     }
   }
   return json({ job }, 202);
 }
 
-async function handleJobs(request: Request, env: Env, parts: string[]): Promise<Response> {
-  // GET /api/jobs  -> daftar id job
+async function handleJobs(request: Request, env: Env, parts: string[], url: URL): Promise<Response> {
+  // GET /api/jobs?limit=&cursor=  -> id job, terbaru dulu
   if (parts.length === 0) {
     if (request.method !== "GET") return err(405, "method_not_allowed", "GET only");
-    const listed = await env.BUCKET.list({ prefix: "jobs/", delimiter: "/", limit: 100 });
-    const ids = listed.delimitedPrefixes.map((p) => p.slice("jobs/".length, -1));
-    return json({ jobs: ids, truncated: listed.truncated });
+    const limit = Math.min(intVar(url.searchParams.get("limit") ?? undefined, LIST_DEFAULT), LIST_MAX);
+    const cursor = url.searchParams.get("cursor") ?? "";
+    if (cursor.length > 2048) return err(400, "invalid_cursor", "cursor too long");
+    const listed = await env.BUCKET.list({ prefix: INDEX_PREFIX, limit, ...(cursor ? { cursor } : {}) });
+    const ids = listed.objects.map((o) => idFromIndexKey(o.key)).filter((id) => JOB_ID.test(id));
+    return json({ jobs: ids, truncated: listed.truncated, cursor: listed.truncated ? listed.cursor : null });
+  }
+
+  // POST /api/jobs/reindex[?cursor=]  -> indeks job lama (FASE 3) secara bertahap
+  if (parts.length === 1 && parts[0] === "reindex") {
+    if (request.method !== "POST") return err(405, "method_not_allowed", "POST only");
+    const cursor = url.searchParams.get("cursor") ?? "";
+    if (cursor.length > 2048) return err(400, "invalid_cursor", "cursor too long");
+    const listed = await env.BUCKET.list({
+      prefix: "jobs/",
+      delimiter: "/",
+      limit: REINDEX_BATCH,
+      ...(cursor ? { cursor } : {}),
+    });
+    let indexed = 0;
+    for (const p of listed.delimitedPrefixes) {
+      const id = p.slice("jobs/".length, -1);
+      if (!JOB_ID.test(id)) continue;
+      const job = await readJob(env, id);
+      if (!job) continue;
+      await env.BUCKET.put(indexKey(job), "");
+      indexed++;
+    }
+    return json({ indexed, truncated: listed.truncated, cursor: listed.truncated ? listed.cursor : null });
   }
 
   const id = parts[0] ?? "";
@@ -242,7 +360,8 @@ async function handleJobs(request: Request, env: Env, parts: string[]): Promise<
       await Promise.all([
         env.BUCKET.delete(jobKey(id)),
         env.BUCKET.delete(outputKey(id)),
-        env.BUCKET.delete(activeKey(id)),
+        env.BUCKET.delete(indexKey(job)),
+        releaseSlot(env, job),
       ]);
       return json({ ok: true, id });
     }
@@ -273,7 +392,7 @@ async function handleJobs(request: Request, env: Env, parts: string[]): Promise<
       job.status = next;
       job.updatedAt = new Date().toISOString();
       await writeJob(env, job);
-      if (next === "failed") await env.BUCKET.delete(activeKey(id));
+      if (next === "failed") await releaseSlot(env, job);
       return json({ job });
     }
     return err(405, "method_not_allowed", "GET, PATCH, DELETE");
@@ -315,7 +434,7 @@ async function handleJobs(request: Request, env: Env, parts: string[]): Promise<
       job.updatedAt = new Date().toISOString();
       delete job.error;
       await writeJob(env, job);
-      await env.BUCKET.delete(activeKey(id));
+      await releaseSlot(env, job);
       return json({ ok: true, id, bytes: declared });
     }
     return err(405, "method_not_allowed", "GET, PUT");
@@ -464,7 +583,7 @@ export default {
 
     try {
       if (parts[0] === "projects") return await handleProjects(request, env, parts.slice(1));
-      if (parts[0] === "jobs") return await handleJobs(request, env, parts.slice(1));
+      if (parts[0] === "jobs") return await handleJobs(request, env, parts.slice(1), url);
       return err(404, "not_found", "unknown route");
     } catch (e) {
       console.error("api error", e instanceof Error ? e.message : String(e));
