@@ -427,3 +427,18 @@ body {
 .palette-actions { display:flex; gap:4px; margin-top:7px; }
 .palette-actions .btn { flex:1; min-width:0; padding:5px 2px; font-size:10px; }
 .palette-name:focus-visible,.saved-palette button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.cloud-tools{display:flex;align-items:center;gap:7px;flex-wrap:wrap;max-width:min(58vw,900px);font-size:11px}
+.cloud-toolbar,.cloud-project-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.cloud-crf,.cloud-project-row label{display:flex;align-items:center;gap:5px;color:var(--text-dim)}
+.cloud-crf select,.cloud-project-row select,.cloud-token-panel input{background:var(--inset);border:1px solid var(--line);border-radius:6px;color:var(--text);padding:5px 7px;font:inherit;max-width:190px}
+.cloud-token-panel{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:8px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px}
+.cloud-token-panel input{width:220px}
+.cloud-assets,.cloud-message{color:var(--text-dim);max-width:100%;overflow-wrap:anywhere}
+.cloud-assets span{opacity:.8}
+.cloud-jobs{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.cloud-job{display:flex;align-items:center;gap:6px;padding:3px 6px;background:var(--panel-2);border-radius:5px;color:var(--text-dim)}
+.cloud-job a{color:var(--accent)}
+.cloud-status{font-weight:700}
+.cloud-status.succeeded{color:#30d158}.cloud-status.failed{color:#ff453a}.cloud-status.running{color:#0a84ff}.cloud-status.queued{color:#ffd60a}
+.cloud-message{font-size:11px}
+@media(max-width:1100px){.cloud-tools{max-width:48vw}.cloud-jobs{display:none}}

@@ -234,7 +234,7 @@ export const App: React.FC = () => {
           {t("redo")}
         </button>
         <span className="tl-sep" />
-        <ExportButton />
+        {(["localhost", "127.0.0.1"].includes(window.location.hostname)) && <ExportButton />}
         <CloudRenderButton />
         <button className="btn" onClick={exportJson}>{t("exportJson")}</button>
         <button className="btn" onClick={() => fileRef.current?.click()}>{t("import")}</button>
