@@ -33,7 +33,7 @@ try {
   // auth + health
   let r = await req("GET", "/api/health", { noAuth: true });
   const health = await r.json();
-  check("health (tanpa token)", r.status === 200 && health.phase === 3, `status ${r.status}`);
+  check("health (tanpa token)", r.status === 200 && health.phase === 4, `status ${r.status}`);
   r = await req("GET", "/api/projects", { noAuth: true });
   check("tanpa token -> 401", r.status === 401, `status ${r.status}`);
 
