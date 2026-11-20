@@ -19,11 +19,12 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 /** 面板尺寸：可拖拽调整，落 localStorage */
 const usePanelSize = (key: string, def: number) => {
   const [v, setV] = useState<number>(() => {
+    if (!window.matchMedia("(min-width: 1025px)").matches) return def;
     const s = localStorage.getItem(key);
     return s ? Number(s) : def;
   });
   useEffect(() => {
-    localStorage.setItem(key, String(v));
+    if (window.matchMedia("(min-width: 1025px)").matches) localStorage.setItem(key, String(v));
   }, [key, v]);
   return [v, setV] as const;
 };
@@ -164,6 +165,7 @@ export const App: React.FC = () => {
   const [libW, setLibW] = usePanelSize("wb-lib-w", 224);
   const [inspW, setInspW] = usePanelSize("wb-insp-w", 300);
   const [tlH, setTlH] = usePanelSize("wb-tl-h", 264);
+  const [mobilePanel, setMobilePanel] = useState<"library" | "inspector" | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -270,13 +272,14 @@ export const App: React.FC = () => {
       </header>
 
       <main className="main">
-        <div className="panel-wrap" style={{ width: libW }}>
+        <div className={`panel-wrap library-wrap ${mobilePanel === "library" ? "mobile-panel-open" : ""}`} style={{ width: libW }}>
           <LibraryPanel />
         </div>
         <div
           className="splitter v"
           title={t("split.library")}
           onPointerDown={(e) => {
+            if (!window.matchMedia("(min-width: 1025px)").matches) return;
             const start = libW;
             startSplit(e, (dx) => setLibW(clamp(start + dx, 160, 440)));
           }}
@@ -286,11 +289,12 @@ export const App: React.FC = () => {
           className="splitter v"
           title={t("split.inspector")}
           onPointerDown={(e) => {
+            if (!window.matchMedia("(min-width: 1025px)").matches) return;
             const start = inspW;
             startSplit(e, (dx) => setInspW(clamp(start - dx, 220, 500)));
           }}
         />
-        <div className="panel-wrap" style={{ width: inspW }}>
+        <div className={`panel-wrap inspector-wrap ${mobilePanel === "inspector" ? "mobile-panel-open" : ""}`} style={{ width: inspW }}>
           <Inspector />
         </div>
       </main>
@@ -299,13 +303,19 @@ export const App: React.FC = () => {
         className="splitter h"
         title={t("split.timeline")}
         onPointerDown={(e) => {
+          if (!window.matchMedia("(min-width: 1025px)").matches) return;
           const start = tlH;
           startSplit(e, (_dx, dy) => setTlH(clamp(start - dy, 150, 600)));
         }}
       />
-      <div className="panel-wrap" style={{ height: tlH }}>
+      <div className="panel-wrap timeline-wrap" style={{ height: tlH }}>
         <Timeline />
       </div>
+      <nav className="mobile-nav" aria-label="Panel Workbench">
+        <button type="button" className={mobilePanel === "library" ? "active" : ""} aria-pressed={mobilePanel === "library"} onClick={() => setMobilePanel(v => v === "library" ? null : "library")}>Library</button>
+        <button type="button" className={mobilePanel === "inspector" ? "active" : ""} aria-pressed={mobilePanel === "inspector"} onClick={() => setMobilePanel(v => v === "inspector" ? null : "inspector")}>Properti</button>
+        <button type="button" onClick={() => { setMobilePanel(null); window.dispatchEvent(new Event("shotcraft:open-cloud")); }}>Cloud</button>
+      </nav>
     </div>
   );
 };

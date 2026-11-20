@@ -441,4 +441,98 @@ body {
 .cloud-status{font-weight:700}
 .cloud-status.succeeded{color:#30d158}.cloud-status.failed{color:#ff453a}.cloud-status.running{color:#0a84ff}.cloud-status.queued{color:#ffd60a}
 .cloud-message{font-size:11px}
-@media(max-width:1100px){.cloud-tools{max-width:48vw}.cloud-jobs{display:none}}
+
+
+/* Cloud controls: compact trigger in the top bar; all secondary controls live in a scrollable panel. */
+.topbar { position: relative; min-width: 0; }
+.cloud-tools { display: block; position: relative; flex: none; max-width: none; font-size: 12px; }
+.cloud-actions { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cloud-status-line { display: block; min-width: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); font-size: 11px; }
+.cloud-popover {
+  position: fixed; z-index: 1000; left: 0; right: 0; bottom: 0;
+  width: 100%; max-height: min(82dvh, 760px); overflow-y: auto; overscroll-behavior: contain;
+  padding: 16px 14px calc(18px + env(safe-area-inset-bottom));
+  background: var(--panel); border: 1px solid var(--line-strong); border-radius: 16px 16px 0 0;
+  box-shadow: 0 -12px 40px rgba(0,0,0,.48); color: var(--text);
+}
+.cloud-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.cloud-toolbar, .cloud-project-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.cloud-crf, .cloud-project-row label { display: flex; align-items: center; gap: 7px; color: var(--text-dim); }
+.cloud-crf select, .cloud-project-row select, .cloud-token-panel input {
+  min-height: 44px; background: var(--inset); border: 1px solid var(--line); border-radius: 7px;
+  color: var(--text); padding: 8px 10px; font: inherit; font-size: 16px; max-width: 100%;
+}
+.cloud-token-panel { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px; margin: 10px 0; background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; }
+.cloud-token-panel label { flex-basis: 100%; }
+.cloud-token-panel input { width: min(100%, 360px); flex: 1 1 220px; }
+.cloud-assets, .cloud-message { color: var(--text-dim); max-width: 100%; overflow-wrap: anywhere; margin: 10px 0; line-height: 1.5; }
+.cloud-assets span { opacity: .8; }
+.cloud-jobs { display: flex; flex-direction: column; align-items: stretch; gap: 7px; margin-top: 12px; }
+.cloud-job { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; padding: 8px; background: var(--panel-2); border-radius: 7px; color: var(--text-dim); }
+.cloud-job a { color: var(--accent); }
+.cloud-status { font-weight: 700; }
+.cloud-status.succeeded { color: #30d158; } .cloud-status.failed { color: #ff453a; } .cloud-status.running { color: #0a84ff; } .cloud-status.queued { color: #ffd60a; }
+.cloud-message { padding: 9px; background: var(--inset); border-radius: 7px; }
+.cloud-empty { color: var(--text-dim); padding: 8px 0; }
+.mobile-nav { display: flex; }
+.mobile-nav button { flex: 1; min-height: 48px; border: 0; border-top: 1px solid var(--line); background: var(--panel); color: var(--text-dim); font: inherit; font-size: 13px; }
+.mobile-nav button.active { color: var(--accent); background: var(--panel-2); }
+:where(button, select, input, textarea, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Base layout is mobile-first: preview, timeline, then bottom navigation. */
+html, body, #root { min-height: 0; height: 100%; height: 100dvh; }
+body { overflow: hidden; }
+.app { display: flex; flex-direction: column; height: 100%; height: 100dvh; min-height: 0; }
+.topbar { height: 54px; min-height: 54px; padding: 0 10px; overflow-x: auto; overflow-y: hidden; gap: 8px; }
+.topbar > * { flex-shrink: 0; }
+.topbar .project-name { width: 132px; }
+.main { display: contents; }
+.preview-panel { order: 2; flex: none; width: 100%; height: auto; min-height: 0; aspect-ratio: 16 / 9; }
+.preview-stage { min-height: 0; padding: 8px; }
+.transport { height: 42px; padding: 0 8px; }
+.timeline-wrap { order: 3; display: flex; flex: 1 1 0; width: 100%; height: auto !important; min-height: 150px; min-width: 0; }
+.timeline { min-height: 0; }
+.library-wrap, .inspector-wrap { display: none; }
+.library-wrap.mobile-panel-open, .inspector-wrap.mobile-panel-open {
+  display: flex; position: fixed; z-index: 80; left: 0; right: 0; top: 54px; bottom: calc(52px + env(safe-area-inset-bottom));
+  width: 100% !important; height: auto; background: var(--panel); box-shadow: 0 10px 35px rgba(0,0,0,.5);
+}
+.mobile-nav { order: 4; flex: none; padding-bottom: env(safe-area-inset-bottom); background: var(--panel); }
+.splitter { display: none !important; }
+.btn, .mini, .lib-tab, .lib-cat-toggle, .mobile-nav button { min-height: 44px; }
+input, select, textarea { font-size: 16px; }
+.cloud-render-button, .cloud-toggle-button { min-height: 44px; }
+.cloud-status-line { max-width: 108px; }
+.cloud-popover { z-index: 1200; }
+.tl-scroller { touch-action: pan-x pan-y; -webkit-overflow-scrolling: touch; }
+.clip, .trim, .ruler { touch-action: none; }
+.lib-cell, .lib-card { touch-action: manipulation; }
+
+/* Tablet: preview + timeline on the left, one switchable side panel. */
+@media (min-width: 641px) {
+  .app { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 34vw); grid-template-rows: 54px minmax(0, 1fr) minmax(190px, 34vh) 0; }
+  .topbar { grid-column: 1 / -1; grid-row: 1; }
+  .preview-panel { grid-column: 1; grid-row: 2; width: 100%; height: auto; aspect-ratio: auto; }
+  .timeline-wrap { grid-column: 1; grid-row: 3; width: 100%; min-height: 0; }
+  .library-wrap.mobile-panel-open, .inspector-wrap.mobile-panel-open { display: flex; position: relative; inset: auto; grid-column: 2; grid-row: 2 / 4; width: 100% !important; height: auto; box-shadow: none; }
+  .mobile-nav { grid-column: 2; grid-row: 4; }
+  .cloud-popover { left: auto; right: 8px; bottom: 58px; width: min(420px, calc(100vw - 16px)); max-height: min(78dvh, 760px); border-radius: 12px; }
+  .cloud-status-line { max-width: 180px; }
+}
+
+/* Desktop: restore the original three-panel + draggable splitter composition. */
+@media (min-width: 1025px) {
+  .app { display: flex; flex-direction: column; }
+  .topbar { height: 50px; min-height: 50px; padding: 0 16px; overflow: visible; }
+  .topbar .project-name { width: 190px; }
+  .main { display: flex; flex: 1; min-height: 0; }
+  .library-wrap, .inspector-wrap { display: flex; position: static; inset: auto; width: auto; height: auto; box-shadow: none; }
+  .preview-panel { flex: 1; min-width: 0; width: auto; height: auto; aspect-ratio: auto; }
+  .timeline-wrap { flex: none; display: flex; width: auto; min-height: 0; }
+  .splitter { display: block !important; }
+  .mobile-nav { display: none; }
+  .cloud-popover { position: absolute; top: calc(100% + 10px); left: auto; right: 0; bottom: auto; width: min(420px, calc(100vw - 24px)); max-height: min(78dvh, 760px); border-radius: 12px; }
+  .cloud-status-line { max-width: 220px; }
+  .btn, .mini, .lib-tab, .lib-cat-toggle { min-height: 0; }
+  input, select, textarea { font-size: inherit; }
+}
