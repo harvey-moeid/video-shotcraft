@@ -166,7 +166,10 @@ const fetchJobPage = async (request: Requester, cursor?: string | null): Promise
 export const CloudRenderButton: React.FC = () => {
   const [token, setToken] = useState(() => sessionStorage.getItem(TOKEN_KEY) ?? "");
   const [tokenDraft, setTokenDraft] = useState("");
-  const [showToken, setShowToken] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(() => !sessionStorage.getItem(TOKEN_KEY));
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const panelId = "cloud-tools-panel";
   const [projects, setProjects] = useState<CloudProject[]>([]);
   const [selectedProject, setSelectedProject] = useState(() => localStorage.getItem(PROJECT_KEY) ?? "");
   const [jobs, setJobs] = useState<CloudJob[]>([]);
@@ -176,6 +179,34 @@ export const CloudRenderButton: React.FC = () => {
   const [message, setMessage] = useState("");
   const [assets, setAssets] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const closePanel = useCallback((restoreFocus = true) => {
+    setPanelOpen(false);
+    if (restoreFocus) window.requestAnimationFrame(() => triggerRef.current?.focus());
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (panelOpen && event.key === "Escape") {
+        event.preventDefault();
+        closePanel();
+      }
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (!panelOpen) return;
+      const target = event.target as Node;
+      if (!panelRef.current?.contains(target) && !triggerRef.current?.contains(target)) closePanel();
+    };
+    const onOpen = () => setPanelOpen(true);
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("shotcraft:open-cloud", onOpen);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("shotcraft:open-cloud", onOpen);
+    };
+  }, [panelOpen, closePanel]);
 
   const request = useCallback(async (path: string, init: RequestInit = {}) => {
     const currentToken = sessionStorage.getItem(TOKEN_KEY);
@@ -204,7 +235,6 @@ export const CloudRenderButton: React.FC = () => {
     sessionStorage.setItem(TOKEN_KEY, tokenDraft);
     setToken(tokenDraft);
     setTokenDraft("");
-    setShowToken(false);
     setMessage("Token disimpan di sesi tab ini.");
   };
 
@@ -484,126 +514,74 @@ export const CloudRenderButton: React.FC = () => {
 
   return (
     <div className="cloud-tools">
-      <div className="cloud-toolbar">
-        <button className="btn primary" type="button" disabled={busy || !token} onClick={start}>
+      <div className="cloud-actions">
+        <button className="btn primary cloud-render-button" type="button" disabled={busy || !token} onClick={start}>
           Cloud render
         </button>
-        <label className="cloud-crf">
-          CRF
-          <select value={crf} onChange={(e) => setCrf(Number(e.target.value))} disabled={busy}>
-            {Array.from({ length: 21 }, (_, i) => i + 15).map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button className="btn" type="button" disabled={busy || !token} onClick={() => fileRef.current?.click()}>
-          ＋ Upload media
+        <button
+          ref={triggerRef}
+          className="btn cloud-toggle-button"
+          type="button"
+          aria-expanded={panelOpen}
+          aria-controls={panelId}
+          onClick={() => setPanelOpen(value => !value)}
+        >
+          Cloud ▾
         </button>
-        <input
-          ref={fileRef}
-          type="file"
-          multiple
-          accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,audio/mpeg,audio/wav,audio/ogg,audio/mp4"
-          hidden
-          onChange={(e) => void uploadFiles(e.target.files)}
-        />
-        <button className="btn" type="button" onClick={() => setShowToken((v) => !v)}>
-          {token ? "Token ✓" : "Atur token"}
-        </button>
+        <span className="cloud-status-line" role="status" aria-live="polite" title={message || "Status cloud"}>
+          {message || (token ? "Cloud siap" : "Token belum diatur")}
+        </span>
       </div>
-      {showToken && (
-        <div className="cloud-token-panel">
-          <label htmlFor="cloud-token">API_TOKEN Worker (minimal 24 karakter)</label>
-          <input
-            id="cloud-token"
-            type="password"
-            autoComplete="off"
-            value={tokenDraft}
-            onChange={(e) => setTokenDraft(e.target.value)}
-            placeholder="Tempel token di sini"
-          />
-          <button className="btn primary" type="button" onClick={saveToken}>
-            Simpan token sesi
-          </button>
-          {token && (
-            <button
-              className="btn"
-              type="button"
-              onClick={() => {
-                sessionStorage.removeItem(TOKEN_KEY);
-                setToken("");
-                setMessage("Token sesi dihapus.");
-              }}
-            >
-              Hapus token
-            </button>
-          )}
-        </div>
-      )}
-      <div className="cloud-project-row">
-        <label>
-          Proyek cloud
-          <select value={selectedProject} onChange={(e) => void switchProject(e.target.value)} disabled={busy || !token}>
-            <option value="">Pilih proyek aktif</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} · {p.id.slice(0, 12)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button className="btn" type="button" disabled={busy || !token} onClick={() => void createProject()}>
-          ＋ Proyek baru
-        </button>
-        <button className="btn" type="button" disabled={busy || !token} onClick={() => void loadProjectsAndJobs()}>
-          Refresh
-        </button>
-      </div>
-      {assets.length > 0 && (
-        <div className="cloud-assets">
-          <b>Aset cloud</b> · {assets.length} file <span>{assets.slice(-4).join(", ")}</span>
-        </div>
-      )}
-      <div className="cloud-jobs">
-        <b>
-          Riwayat render ({jobs.length}
-          {jobCursor ? "+" : ""})
-        </b>
-        {jobs.map((j) => (
-          <div className="cloud-job" key={j.id}>
-            <span className={`cloud-status ${j.status}`}>{j.status}</span>
-            <span>
-              {j.projectId.slice(0, 18)} · CRF {j.crf}
-            </span>
-            <span>{new Date(j.createdAt).toLocaleString()}</span>
-            {j.runUrl && (
-              <a href={j.runUrl} target="_blank" rel="noreferrer">
-                Log
-              </a>
-            )}
-            {j.status === "succeeded" && (
-              <button className="mini" disabled={busy} onClick={() => void downloadOutput(j.id)}>
-                Unduh
-              </button>
-            )}
-            {(j.status === "succeeded" || j.status === "failed") && (
-              <button className="mini" disabled={busy} onClick={() => void deleteJob(j.id)}>
-                Hapus
-              </button>
-            )}
+      {panelOpen && (
+        <div className="cloud-popover" id={panelId} ref={panelRef} role="region" aria-label="Kontrol cloud">
+          <div className="cloud-panel-heading">
+            <strong>Kontrol cloud</strong>
+            <button className="mini cloud-close" type="button" onClick={() => closePanel()} aria-label="Tutup panel cloud">Tutup ✕</button>
           </div>
-        ))}
-        {jobCursor && (
-          <button className="mini" type="button" disabled={busy || !token} onClick={() => void loadMoreJobs()}>
-            Muat lebih
-          </button>
-        )}
-      </div>
-      {message && (
-        <div className="cloud-message" role="status" aria-live="polite">
-          {message}
+          <div className="cloud-toolbar">
+            <label className="cloud-crf">
+              CRF
+              <select value={crf} onChange={(e) => setCrf(Number(e.target.value))} disabled={busy}>
+                {Array.from({ length: 21 }, (_, i) => i + 15).map((v) => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </label>
+            <button className="btn" type="button" disabled={busy || !token} onClick={() => fileRef.current?.click()}>＋ Upload media</button>
+            <input ref={fileRef} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,audio/mpeg,audio/wav,audio/ogg,audio/mp4" hidden onChange={(e) => void uploadFiles(e.target.files)} />
+          </div>
+          <div className="cloud-token-panel">
+            <label htmlFor="cloud-token">API_TOKEN Worker (minimal 24 karakter)</label>
+            <input id="cloud-token" type="password" autoComplete="off" value={tokenDraft} onChange={(e) => setTokenDraft(e.target.value)} placeholder="Tempel token di sini" />
+            <button className="btn primary" type="button" onClick={saveToken}>Simpan token sesi</button>
+            {token && <button className="btn" type="button" onClick={() => { sessionStorage.removeItem(TOKEN_KEY); setToken(""); setMessage("Token sesi dihapus."); }}>Hapus token</button>}
+          </div>
+          <div className="cloud-project-row">
+            <label>
+              Proyek cloud
+              <select value={selectedProject} onChange={(e) => void switchProject(e.target.value)} disabled={busy || !token}>
+                <option value="">Pilih proyek aktif</option>
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.id.slice(0, 12)}</option>)}
+              </select>
+            </label>
+            <button className="btn" type="button" disabled={busy || !token} onClick={() => void createProject()}>＋ Proyek baru</button>
+            <button className="btn" type="button" disabled={busy || !token} onClick={() => void loadProjectsAndJobs()}>Refresh</button>
+          </div>
+          {assets.length > 0 && <div className="cloud-assets"><b>Aset cloud</b> · {assets.length} file <span>{assets.slice(-4).join(", ")}</span></div>}
+          <div className="cloud-jobs">
+            <b>Riwayat render ({jobs.length}{jobCursor ? "+" : ""})</b>
+            {jobs.length === 0 && <span className="cloud-empty">Belum ada riwayat render.</span>}
+            {jobs.map((j) => (
+              <div className="cloud-job" key={j.id}>
+                <span className={`cloud-status ${j.status}`}>{j.status}</span>
+                <span>{j.projectId.slice(0, 18)} · CRF {j.crf}</span>
+                <span>{new Date(j.createdAt).toLocaleString()}</span>
+                {j.runUrl && <a href={j.runUrl} target="_blank" rel="noreferrer">Log</a>}
+                {j.status === "succeeded" && <button className="mini" disabled={busy} onClick={() => void downloadOutput(j.id)}>Unduh</button>}
+                {(j.status === "succeeded" || j.status === "failed") && <button className="mini" disabled={busy} onClick={() => void deleteJob(j.id)}>Hapus</button>}
+              </div>
+            ))}
+            {jobCursor && <button className="mini" type="button" disabled={busy || !token} onClick={() => void loadMoreJobs()}>Muat lebih</button>}
+          </div>
+          {message && <div className="cloud-message" role="status" aria-live="polite">{message}</div>}
         </div>
       )}
     </div>
