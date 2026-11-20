@@ -16,7 +16,7 @@ const safeAssetName = (name: string) => {
   if (!clean || !/^[A-Za-z0-9]/.test(clean)) throw new Error("Nama file tidak valid.");
   return "uploads/" + Date.now().toString(36) + "-" + clean;
 };
-const contentTypeFor = (file: File) => {
+const contentTypeFor = (file: { name: string; type: string }) => {
   if (file.type && file.type !== "application/octet-stream") return file.type;
   const ext = file.name.split(".").pop()?.toLowerCase();
   const types: Record<string, string> = {png:"image/png",jpg:"image/jpeg",jpeg:"image/jpeg",webp:"image/webp",gif:"image/gif",mp3:"audio/mpeg",wav:"audio/wav",ogg:"audio/ogg",m4a:"audio/mp4",mp4:"video/mp4",webm:"video/webm"};
@@ -114,7 +114,7 @@ export const CloudRenderButton: React.FC = () => {
       if(file.split("/").some(part=>part===".."||!part))throw new Error(`Path aset tidak valid: ${file}`);
       const source=await fetch("/"+encodePath(file));if(!source.ok)throw new Error(`Aset lokal tidak ditemukan: ${file} (HTTP ${source.status}). Upload file dari browser terlebih dahulu.`);
       const blob=await source.blob();if(!blob.size)throw new Error(`Aset kosong: ${file}`);
-      const type=contentTypeFor(new File([] ,file),blob.type);if(!type)throw new Error(`Tipe aset tidak didukung: ${file}`);
+      const type=contentTypeFor({name:file,type:blob.type});if(!type)throw new Error(`Tipe aset tidak didukung: ${file}`);
       setMessage(`Sinkronisasi aset ${file}…`);await uploadBlob(id,file,blob,type);
     }
   };
