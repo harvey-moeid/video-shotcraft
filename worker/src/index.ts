@@ -447,7 +447,7 @@ export default {
     if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(request);
 
     if (url.pathname === "/api/health") {
-      return json({ ok: true, service: "video-shotcraft", phase: 3 });
+      return json({ ok: true, service: "video-shotcraft", phase: 4 });
     }
 
     if (!(await tokenValid(request, env))) {
